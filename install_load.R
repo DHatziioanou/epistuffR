@@ -16,7 +16,7 @@
 #' 
 #' install_load("data.table")
 #' 
-#' install_load(c("data.table", "dplyr", "tidyr", "ggplot2"), quiet = F)
+#' install_load("data.table", "dplyr", "tidyr", "ggplot2")
 #'
 install_load <- function(packages, ..., repo, lib, quiet)  {
   packages <- c(packages, ...)
@@ -39,24 +39,33 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
   
   # Install missing packages
   if (length(missing)  > 0) {
-    message("Please wait while necessary packages are installed...")
+    message(paste("Please wait while",length(missing),"packages are installed..."))
     
-    if (sum("pkgbuild" %in% packages) > 0) {
-      packages <- c("pkgbuild", packages)
+    if (sum("devtools" %in% packages) > 0 & !("pkgbuild" %in% rownames(installed.packages()))) {
+      missing <- c("pkgbuild", "ps", missing)
     }
     
     for (package in missing) {  
+      if (!is.null(sessionInfo()$otherPkgs)) lapply(paste('package:' ,names(sessionInfo()$otherPkgs), sep = ""), detach,character.only = TRUE, unload = TRUE)
       
       t <- try(install.packages(package, type = "source", dependencies = T, quiet = quiet, repos = repo, lib = lib))
       t2 <- try(ifelse(inherits(t, "try-error"), 
-             alternativeFunction(install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)), 
-             F))
-      ifelse(inherits(t2, "try-error"), 
-             alternativeFunction(install.packages(package, type = "binary", dependencies = F, quiet = quiet, repos = repo, lib = lib)), 
-             F)
-      
-      message(paste(package, "installed"))
-    }
+                       alternativeFunction(install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)), 
+                       F))
+    
+      if (!(package %in% rownames(installed.packages()))) {
+        if (!is.null(sessionInfo()$otherPkgs)) lapply(paste('package:' ,names(sessionInfo()$otherPkgs), sep = ""), detach,character.only = TRUE, unload = TRUE)
+        install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)
+      }
+      if (package %in% rownames(installed.packages())) message(paste(package, "installed")) else message(paste(package, "not installed"))
+    } 
+  }
+  
+  missing <- packages[!(packages %in% rownames(installed.packages()))]
+  if ( length(missing) > 0) {
+    message(paste("Packages not installed:"))
+    print(missing)
+    message("Try installing manually")
   }
   
   # Load packages
@@ -64,8 +73,11 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
     
     # if package is installed locally, load
     if (package %in% rownames(installed.packages()))
-      do.call('library', list(suppressPackageStartupMessages(package)))
-    
+     t <- try( do.call('library', list(suppressPackageStartupMessages(package))))
+    if (inherits(t, "try-error")) { 
+           install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)
+           do.call('library', list(suppressPackageStartupMessages(package)))
+    }
   }
-  message("All loaded.")
+  message(sum((.packages()) %in% packages), " packages out of ",length(packages), " loaded.")
 }
