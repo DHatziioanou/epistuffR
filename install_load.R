@@ -24,9 +24,9 @@ install_load <- function(package1, ...)  {
     
     for (package in missing) {  
       
-    t <- try(install.packages(package, dependencies = TRUE, quiet = TRUE))
+    t <- try(install.packages(package, type = "source", dependencies = TRUE, quiet = TRUE))
     ifelse(inherits(t, "try-error"), 
-           alternativeFunction(install.packages(package, type = "binary")), 
+           alternativeFunction(install.packages(package, type = "binary", dependencies = TRUE, quiet = TRUE)), 
            t)
     message(paste(package, "installed"))
     }
