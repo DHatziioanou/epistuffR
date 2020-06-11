@@ -79,5 +79,8 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
            do.call('library', list(suppressPackageStartupMessages(package)))
     }
   }
-  message(sum((.packages()) %in% packages), " packages out of ",length(packages), " loaded.")
+  loaded_packages <- (.packages())
+  message(sum(loaded_packages %in% packages), " packages out of ",length(packages), " loaded.")
+  message("Not loaded:")
+  print(loaded_packages[!(packages %in% loaded_packages)])
 }
