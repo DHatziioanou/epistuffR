@@ -16,20 +16,20 @@
 #' 
 #' install_load("data.table")
 #' 
-#' install_load("data.table", "dplyr", "tidyr", "ggplot2")
+#' install_load(c("data.table", "dplyr", "tidyr", "ggplot2"), quiet = F)
 #'
 install_load <- function(packages, ..., repo, lib, quiet)  {
   packages <- c(packages, ...)
   
-  if(missing(repo)){
+  if (missing(repo)) {
     repo <- 'http://cran.rstudio.com/'
   }
   
-  if(missing(lib)){
+  if (missing(lib)) {
     lib <- .libPaths()[1]
   }
   
-  if(missing(quiet)){
+  if (missing(quiet)) {
     quiet <- T
   }
   
@@ -41,14 +41,18 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
   if (length(missing)  > 0) {
     message("Please wait while necessary packages are installed...")
     
+    if (sum("pkgbuild" %in% packages) > 0) {
+      packages <- c("pkgbuild", packages)
+    }
+    
     for (package in missing) {  
       
-      t <- try(install.packages(package, type = "source", dependencies = T, quiet = quiet, repos=repo, lib = lib))
+      t <- try(install.packages(package, type = "source", dependencies = T, quiet = quiet, repos = repo, lib = lib))
       t2 <- try(ifelse(inherits(t, "try-error"), 
-             alternativeFunction(install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos=repo, lib = lib)), 
+             alternativeFunction(install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)), 
              F))
       ifelse(inherits(t2, "try-error"), 
-             alternativeFunction(install.packages(package, type = "binary", dependencies = F, quiet = quiet, repos=repo, lib = lib)), 
+             alternativeFunction(install.packages(package, type = "binary", dependencies = F, quiet = quiet, repos = repo, lib = lib)), 
              F)
       
       message(paste(package, "installed"))
