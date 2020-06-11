@@ -1,4 +1,3 @@
-
 #' For a list of packages install missing ones and load them all.
 #'
 #' 
@@ -52,7 +51,7 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
       t2 <- try(ifelse(inherits(t, "try-error"), 
                        alternativeFunction(install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)), 
                        F))
-    
+      
       if (!(package %in% rownames(installed.packages()))) {
         if (!is.null(sessionInfo()$otherPkgs)) lapply(paste('package:' ,names(sessionInfo()$otherPkgs), sep = ""), detach,character.only = TRUE, unload = TRUE)
         install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)
@@ -73,14 +72,16 @@ install_load <- function(packages, ..., repo, lib, quiet)  {
     
     # if package is installed locally, load
     if (package %in% rownames(installed.packages()))
-     t <- try( do.call('library', list(suppressPackageStartupMessages(package))))
+      t <- try( do.call('library', list(suppressPackageStartupMessages(package))))
     if (inherits(t, "try-error")) { 
-           install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)
-           do.call('library', list(suppressPackageStartupMessages(package)))
+      install.packages(package, type = "binary", dependencies = T, quiet = quiet, repos = repo, lib = lib)
+      do.call('library', list(suppressPackageStartupMessages(package)))
     }
   }
   loaded_packages <- (.packages())
-  message(sum(loaded_packages %in% packages), " packages out of ",length(packages), " loaded.")
+  message(sum(unique(loaded_packages) %in% packages), " packages out of ",length(unique(packages)), " loaded.")
+  if(length(loaded_packages[!(packages %in% loaded_packages)]) >0){
   message("Not loaded:")
   print(loaded_packages[!(packages %in% loaded_packages)])
+  }
 }
