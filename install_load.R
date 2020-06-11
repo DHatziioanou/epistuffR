@@ -19,7 +19,7 @@ install_load <- function(package1, ...)  {
   missing <- packages[!(packages %in% rownames(installed.packages()))]
   
   # Install missing packages
-  if (!is.null(dim(missing))) {
+  if (is.null(dim(missing))) {
     message("Please wait while necessary packages are installed...")
     
     for (package in missing) {  
