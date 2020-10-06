@@ -22,7 +22,10 @@
 #' 
 #' @export
 import_any <- function(file, sheet){
-  
+  if (!require("tools")) {
+    install.packages("tools")
+    suppressWarnings(library(tools))
+  }
   # Sheet name or number for workbooks
   if (missing(sheet)) {
     sheet <- 1
