@@ -9,6 +9,7 @@
 #' @param fn first name column within the Line-list object as a string
 #' @param dob date of birth column within the Line-list object as a string
 #' @param pc postcode column within the Line-list object as a string
+#' @param geo Geography where most individuals can be found. This string must be present in a column of dba.
 #' 
 #' @param dba Input database list containing the following items;
 #' @param ob database object to search. All columns of this database will be appended to the input line list
@@ -16,12 +17,13 @@
 #' @param fn first name column within the database object as a string
 #' @param dob date of birth column within the database object as a string
 #' @param pc postcode column within the database object as a string
+#' @param geo Geography column containing the location in string format from lla geo where most individuals can be found. 
 #' 
 #' @param stringency Optional; stringency required stringency of matching; one of high, medium or low. Default is high. 
 #' 
 #' @param pc_format postcode format where l = letters and n = numbers. Default is the UK format "lnl"
 #' 
-#' @param case_number Column within the custom line list with one unique case number per row
+#' @param case_column Column within the custom line list with one unique case number per row
 #' 
 #' @return Returns the original input object as a data.frame with added columns of the input databse where there is a match base on full name and DOB
 #'
@@ -44,7 +46,7 @@
 #' Positives <- Fuzzy_match(lla, dba, strict = F, pc_format = "lnl)
 #' Negatives <- Fuzzy_match(lla, dba, strict = T) 
 #' 
-fuzzy_match <- function(lla, dba, stringency, pc_format, case_number){
+fuzzy_match <- function(lla, dba, stringency, pc_format, case_column){
   library(stringr)
   library(data.table)
   library(stringdist)
@@ -58,14 +60,7 @@ fuzzy_match <- function(lla, dba, stringency, pc_format, case_number){
   if (missing(pc_format)) {
     pc_format <- "lnl"
   }
-  if (missing(case_number)) {
-    case_number <- "Case"
-  } else {
-    # If duplicate case numbers stop
-    if(sum(duplicated(llaob[,get(case_number)])) >0 )
-      stop(paste0("Duplicates found in ", case_number, ". Remove duplicates or omit the case_number argument to assign new case numbers"))
-  }
-  
+
   pattern <- paste0(get(substr(pc_format,1,1)),".*")
   if(length(pattern >1)){
     for (letter in 1:(nchar(pc_format)-1)){
@@ -78,7 +73,13 @@ fuzzy_match <- function(lla, dba, stringency, pc_format, case_number){
   # Format to data.table for speed
     dbaob <- copy(as.data.table(dba$ob))
     llaob <- copy(as.data.table(lla$ob))
-
+    
+  if (!(missing(case_column))) {
+    # If duplicate case numbers stop
+    if(sum(duplicated(llaob[,get(case_column)])) >0 ){
+      stop(paste0("Duplicates found in ", case_column, ". Remove duplicates or omit the case_number argument to assign new case numbers"))
+  }}
+  
   # Format Surnames  
     # Uppercase
    dbaob[, db_Surname := toupper(get(dba$sn))]  
@@ -203,7 +204,7 @@ fuz_search <- function(dbaob){
    
      # Gather geography and reserve matches
      x <- rbindlist(list(matches[[1]], matches_reserve[[1]]), fill = T, use.names = T)
-     x <- x[x$Name_score>=0.5,]
+     x <- x[x$Name_score>=0.7,]
      d <- rbindlist(list(matches[[2]], matches_reserve[[2]]), fill = T, use.names = T)
      
  } else {
@@ -213,8 +214,14 @@ fuz_search <- function(dbaob){
    }
 
     # Remove duplicate rows
+     x <- x[x$Name_score >= 0.7,]
      x <- unique(x)
      d <- unique(d)
+
+     if(nrow(x)>10){ 
+       x <- x[order(Name_score, Name_score_pos, na.last = T, decreasing = T)]
+       x <- x[1:10,]
+       }
      
 # If no matches skip loop and go to next record ------------------------
     if (length(x) == 0) {
@@ -247,6 +254,7 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
     # Add line list info to matched db records
      setkey(y, "db_fullname")
      y[, c(dba$sn, dba$fn, dba$dob, dba$pc) := NULL]
+     y <- unique(y)
      y <- merge(y, x, by = "db_fullname", all = T)
      
      # Matched records from dob search
@@ -268,7 +276,14 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
     } 
      
      # Add basic info and match scores
-     y[, (case_number):= i]
+     if(missing(case_column)){
+       case_column <- "Case"
+            y[, (case_column):= i]
+     } else {
+       case_n <- as.character(llaob[i, ..case_column])
+            suppressWarnings(y[, (case_column):= case_n])
+     }
+
      y[,ll_Postcode := llaob$ll_Postcode[i]]
      y[,DOB_score := stringdist::stringsim(as.character(ll_DOB), as.character(db_DOB), method = "lv")]
      #z[, DOB_score := unique(DOB_score[!is.na(DOB_score)]), by = Case]
@@ -282,6 +297,9 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
      dup <- copy(y[, .SD, .SDcols=db_col])
      y <- y[!(which(duplicated(dup) == TRUE)),]
 
+     # Temporary
+     fwrite(y, paste0(i, "fuzz_match.csv"), col.names = T, row.names = F)
+     
     if (exists("z")) {
       z <- rbindlist(list(z,y), fill = T, use.names = T)
     } else {
@@ -385,7 +403,7 @@ if (stringency == "medium") {
 
 # Order columns and rows
 setcolorder(z, c(case_number,"Fuzzy_match_RAG", "Case_ID_Warning", "ll_fullname", "Matched_name", "db_fullname", "ll_DOB", "db_DOB", "ll_Postcode", "db_Postcode", "Fuz_score", "Name_score", "DOB_score", "PC_score", "db_Surname", "db_Name"))
-
+setnames(z, c("ll_fullname", "db_fullname", "Matched_name"), c("ll_surname_firstname", "db_surname_firstname", "Matched_surname_firstname"), skip_absent=T)
 
 
 cat(" Search completed")
