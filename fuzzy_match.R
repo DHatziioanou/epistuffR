@@ -127,6 +127,8 @@ fuzzy_match <- function(lla, dba, stringency, pc_format, case_column, parallel){
    dbaob[, db_Postcode := toupper(gsub(" |[[:punct:]]", "", get(dba$pc)))]  
    llaob[, ll_Postcode := toupper(gsub(" |[[:punct:]]", "", get(lla$pc)))]
   # Remove postcodes which don't follow the format character-number-character 
+   dbaob[,db_Postcode:= as.character(db_Postcode)]
+   llaob[,ll_Postcode:= as.character(ll_Postcode)]
    dbaob[!(grepl(pattern, db_Postcode)), db_Postcode := NA]
    llaob[!(grepl(pattern, ll_Postcode)), ll_Postcode := NA]
 
@@ -249,10 +251,10 @@ if(parallel == F){
      x <- unique(x)
      d <- unique(d)
 
-     if(nrow(x)>10){ 
-       x <- x[order(Name_score, Name_score_pos, na.last = T, decreasing = T)]
-       x <- x[1:10,]
-       }
+     # if(nrow(x)>10){ 
+     #   x <- x[order(Name_score, Name_score_pos, na.last = T, decreasing = T)]
+     #   x <- x[1:10,]
+     #   }
      
 # If no matches skip loop and go to next record ------------------------
     if (nrow(x) == 0) {
@@ -286,7 +288,7 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
      setkey(y, "db_surname_firstname")
      y[, c(dba$sn, dba$fn, dba$dob, dba$pc) := NULL]
      y <- unique(y)
-     y <- merge(y, x, by = "db_surname_firstname", all = T)
+     y <- merge(y, x, by = "db_surname_firstname", all = T, allow.cartesian=TRUE)
      
      # Matched records from dob search
     if (nrow(d)>0) {
@@ -343,7 +345,7 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
     # Number of available cores
     numCores <- detectCores()
     # Open cluster
-    cluster <- makeCluster(numCores, outfile = "")
+    cluster <- makeCluster(numCores[1]-1, outfile = "")
     cases <- 1:nrow(llaob)
     
     # Search ll against db by full name and dob  -------------------------------------------------
@@ -493,7 +495,7 @@ suppressWarnings(rm( list = Filter( exists, c("x", "d", " b", "fn", "sn", "sn_fu
       return(par_return)
     }
 
-    registerDoParallel(cl = cluster, cores = numCores)  # use multicore, set to the number of our cores
+    registerDoParallel(cl = cluster)  # use multicore, set to the number of our cores
     par_all <- foreach (i=cases, .packages = c("data.table"), .verbose = T) %dopar% {
       par_list <- retrieve_data(i, case_column)
       return(par_list)
@@ -587,12 +589,12 @@ if (stringency == "medium") {
   z[Name_score < 0.72, which(names(z) %in% removal_cols) := NA]
   z[DOB_score < 0.7 & !is.na(DOB_score), which(names(z) %in% removal_cols) := NA]
   # Remove duplicated rows with low match data
-  z <- z[!duplicated(z)]
+  z <- z[!duplicated(z),]
   # Retain unmatched only if no matches
   cases_NA <- copy(z[is.na(z$db_surname_firstname),get(case_column)])
   cases_matched <- copy(unique(z[!is.na(z$db_surname_firstname),get(case_column)]))
   cases_to_keep <- cases_NA[!(cases_NA %in% cases_matched)]
-  z <- z[!(get(case_column) %in% cases_to_keep) & !(is.na(db_surname_firstname))]
+  z <- z[!(duplicated(z)),]
 
 } else if(stringency == "high"){
   # Remove medium and low score data
@@ -600,18 +602,32 @@ if (stringency == "medium") {
   z[DOB_score < 0.8 & !is.na(DOB_score), which(names(z) %in% removal_cols) := NA]
   
   # Remove duplicated rows with low match data
-  z <- z[!duplicated(z)]
+  z <- z[!duplicated(z),]
   # Retain unmatched only if no matches
   cases_NA <- copy(z[is.na(z$db_surname_firstname),get(case_column)])
   cases_matched <- copy(unique(z[!is.na(z$db_surname_firstname),get(case_column)]))
   cases_to_keep <- cases_NA[!(cases_NA %in% cases_matched)]
-  z <- z[!(get(case_column) %in% cases_to_keep) & !(is.na(db_surname_firstname))]
+  z <- z[!(duplicated(z)),]
+} else if(stringency == "top"){
+  # Remove medium and low score data
+  z[Fuzzy_match_RAG == "RED", which(names(z) %in% removal_cols) := NA]
+ 
+  # Remove duplicated rows with low match data
+  z <- z[!duplicated(z),]
+  # Retain unmatched only if no matches
+  cases_NA <- copy(z[is.na(z$db_surname_firstname),get(case_column)])
+  cases_matched <- copy(unique(z[!is.na(z$db_surname_firstname),get(case_column)]))
+  cases_to_keep <- cases_NA[!(cases_NA %in% cases_matched)]
+  z <- z[!(duplicated(z)),]
+
 }
 
+
 # Add custom line list columns back
-llaob[,(case_column):= lapply(.SD, as.character), .SDcols = case_column]
-setDF(llaob)
-z <- merge(z, llaob[,c(case_column, names(llaob)[!(names(llaob) %in% names(z))])], by = case_column, all = T)
+if(!(case_column %in% names(llaob))) llaob[,(case_column):= 1:nrow(llaob)]
+setDT(llaob)[,(case_column):= lapply(.SD, as.character), .SDcols = case_column]
+names <- c(case_column, names(llaob)[!(names(llaob) %in% names(z))])
+z <- merge(z, llaob[,..names], by = case_column, all = T)
 
 
 # Order columns and rows
